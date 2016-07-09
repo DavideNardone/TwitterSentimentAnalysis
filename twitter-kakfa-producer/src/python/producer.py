@@ -1,8 +1,6 @@
 from __future__ import print_function
 
-
 import os
-# import sys
 import time
 from kafka import KafkaProducer
 import ConfigParser
@@ -10,14 +8,15 @@ import ConfigParser
 if __name__ == "__main__":
 
     config = ConfigParser.ConfigParser()
-    config.read('/Users/davidenardone/PycharmProjects/TwitterSentimentAnalysis/twitter-kakfa-producer/conf/test.conf')
+    print (os.getcwd()+'/twitter-kakfa-producer/conf/producer.conf')
+    config.read(os.getcwd()+'/twitter-kakfa-producer/conf/producer.conf')
 
     #reading configuration
     brookers = config.get('Kafka configurations', 'metadata.broker.list')
     kafka_topic = config.get('Kafka configurations', 'kafka.topic').replace('"', '''''')
     request_required_acks = config.get('Kafka configurations', 'request.required.acks')
 
-    print(os.getcwd()+'/twitterDataset/twitter/testdata.txt')
+
     producer = KafkaProducer(
                             bootstrap_servers = brookers,
                             acks = int(request_required_acks)
