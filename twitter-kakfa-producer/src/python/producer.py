@@ -2,8 +2,11 @@ from __future__ import print_function
 
 import os
 import time
+import json
+import csv
 from kafka import KafkaProducer
 import ConfigParser
+
 
 if __name__ == "__main__":
 
@@ -18,12 +21,25 @@ if __name__ == "__main__":
 
 
     producer = KafkaProducer(
-                            bootstrap_servers = brookers,
-                            acks = int(request_required_acks)
-                            )
+        bootstrap_servers = brookers,
+        acks = int(request_required_acks)
+    )
 
     #reading tweets from a file and send to the consumer
-    with open('../../twitterDataset/twitter/testdata.txt') as f:
-            for line in f:
-                time.sleep(1)
-                producer.send(kafka_topic, line)
+
+    # read text file tab-separated
+    text_file = list(
+        csv.reader(
+            open('/Users/davidenardone/Desktop/testdata.txt', 'rU'),
+            delimiter = '\t',
+            # lineterminator='\r\n',
+            # quoting=csv.QUOTE_ALL
+        )
+    )
+
+    for row in text_file:
+        time.sleep(1)
+        # text = str(row)
+        print(text)
+        jd = json.dumps(row).encode('ascii')
+        producer.send(kafka_topic,jd)

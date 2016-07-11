@@ -198,7 +198,5 @@ class Emoticons:
         '(?_?)': 'confusion',
     } #dictionary of emoticons
 
-    def getDictionary(self):
+    def getEmoticons(self):
         return self.emoticons
-
-    # print(emoticons['^^'])
