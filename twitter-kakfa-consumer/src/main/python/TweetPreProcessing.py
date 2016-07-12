@@ -1,8 +1,10 @@
 import re
 import os
 import json
+from HTMLParser import HTMLParser
 from Emoticons import Emoticons
 from Acronyms import Acronyms
+
 
 class TweetPreProcessing:
 
@@ -12,10 +14,18 @@ class TweetPreProcessing:
 
     def stemming(self, text):
 
-        # make all word in the string lower
+        # Make all word in the string lower
         text = text.lower()
 
-        # convert string to list
+        # Html character codes (i.e., &alt; &amp;) are replaced with an ASCII equivalent.
+        h = HTMLParser()
+        text = h.unescape(text)
+
+        # Due the conversion of text into 'unicode' in the last function,
+        # text needs to be converted again into string
+        text = str(text)
+
+        # Convert string to list
         text = text.split(" ")
 
         # Replace all the emoticons with their sentiment.
@@ -32,7 +42,6 @@ class TweetPreProcessing:
         #Cleaning up string
         text = self.cleanUpTweet(text).split(" ") #then .split(" ") convert string to list
 
-
         # Create stop words
         # TODO: Move into class
         stop_words = [];
@@ -40,8 +49,12 @@ class TweetPreProcessing:
             for line in f:
                 stop_words.append(line.replace("\n", ""))
 
+        # NOTE: Til now we've removed all duplicate (words and stop word),
+        # but it has to be checked whether duplicate words can influence on the sentiment-weight of the world
+        # (e.g. 'im', 'listening', 'by', 'danny', 'gokey', 'heart', 'heart', 'heart', 'aww', 'hes', 'so', 'amazing', 'i', 'heart', 'him', 'so', 'much', 'smile')
+
         # Remove duplicate in tweet (e.g. Fair enough. But i have the Kindle2 and i think it's perfect)
-        #TODO: it should be done only for duplicate "stop word"
+        # TODO: it should be done only for duplicate "stop word"
         text_list = []
         for word in text:
             if word not in text_list:
@@ -66,10 +79,9 @@ class TweetPreProcessing:
         return text_list
 
 
+    # Remove punctuations, Symbols and number
+    # all URLs(e.g.www.xyz.com), hash tags(e.g.  # topic), targets (@username)
     def cleanUpTweet(self, text):
-        # Remove punctuations, Symbols and number
-        # all URLs(e.g.www.xyz.com), hash tags(e.g.  # topic), targets (@username)
-
         text = text.lower().strip() #lower and remove space in text
         # text = re.sub("\d+", '', text)  # Remove digit
         text = re.sub('(\d+)|(@[A-Za-z0-9]+)|([^0-9A-Za-z \t])|(\w+:\/\/\S+)', '', text)
@@ -82,12 +94,18 @@ class TweetPreProcessing:
 
 
     def getPolarity(self, text):
-        polarity = text[0]
+
+        if text[0] in '0':
+            polarity = 'negative'
+        elif text[0] in '2':
+            polarity = 'neutral'
+        else:
+            polarity = 'positive'
 
         return polarity
 
     def getId(self, text):
-        id = text[1]
+        id = int(text[1])
 
         return id
 
@@ -96,10 +114,10 @@ class TweetPreProcessing:
 
         return date
 
-    def getReceiver(self, text):
-        receiver = text[3]
+    def getQuery(self, text):
+        query = text[3]
 
-        return receiver
+        return query
 
     def getSender(self, text):
         sender = text[4]
@@ -124,12 +142,12 @@ class TweetPreProcessing:
 
         polarity = self.getPolarity(text)
         # print(polarity)
-        # id = self.getId(text)
+        id = self.getId(text)
         # print(id)
         # date = self.getDate(text)
         # print(date)
-        # receiver = self.getReceiver(text)
-        # print(receiver)
+        # query = self.getQuery(text)
+        # print(query)
         # sender = self.getSender(text)
         # print(sender)
         tweet = self.getTweet(text)
@@ -137,8 +155,14 @@ class TweetPreProcessing:
 
         tweet_stemmed = self.stemming(tweet)
 
-        tweet_stemmed.insert(0,polarity)
 
-        tweet_stemmed = ' '.join(tweet_stemmed)
-        # print(tweet_stemmed)
-        return tweet_stemmed
+        # tweets = (tweet_stemmed,polarity)
+
+        # tweets = tweet_stemmed + polarity
+
+        # print(type(tweets))
+        # print(tweets)
+        tweets = []
+        tweets.append((tweet_stemmed, id))
+
+        return tweets

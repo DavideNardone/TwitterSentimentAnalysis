@@ -30,8 +30,8 @@ if __name__ == "__main__":
     # read text file tab-separated
     text_file = list(
         csv.reader(
-            open('/Users/davidenardone/Desktop/testdata.txt', 'rU'),
-            delimiter = '\t',
+            open('/Users/davidenardone/twitterDataset/twitter/test_data.txt', 'rU')
+            # delimiter = '\t',
             # lineterminator='\r\n',
             # quoting=csv.QUOTE_ALL
         )
@@ -40,6 +40,6 @@ if __name__ == "__main__":
     for row in text_file:
         time.sleep(1)
         # text = str(row)
-        print(text)
+        # print(text)
         jd = json.dumps(row).encode('ascii')
         producer.send(kafka_topic,jd)
