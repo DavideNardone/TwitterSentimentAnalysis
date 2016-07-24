@@ -1,10 +1,12 @@
 import re
 import os
+import sys
 import json
 from HTMLParser import HTMLParser
 from Emoticons import Emoticons
 from Acronyms import Acronyms
-
+from pyspark.mllib.feature import HashingTF
+from pyspark.mllib.feature import IDF
 
 class TweetPreProcessing:
 
@@ -12,12 +14,16 @@ class TweetPreProcessing:
 
     # def __init__(self):
 
-    def stemming(self, text):
+    def processTweet(self, text):
 
-        # Make all word in the string lower
+        #Convert to lower case
         text = text.lower()
 
         # Html character codes (i.e., &alt; &amp;) are replaced with an ASCII equivalent.
+        # FIXME: probably error with 'utf8' characters whose are not encoded...
+        # work-around to fix 'utf-8' problem
+        reload(sys)
+        sys.setdefaultencoding('utf8')
         h = HTMLParser()
         text = h.unescape(text)
 
@@ -53,13 +59,20 @@ class TweetPreProcessing:
         # but it has to be checked whether duplicate words can influence on the sentiment-weight of the world
         # (e.g. 'im', 'listening', 'by', 'danny', 'gokey', 'heart', 'heart', 'heart', 'aww', 'hes', 'so', 'amazing', 'i', 'heart', 'him', 'so', 'much', 'smile')
 
-        # Remove duplicate in tweet (e.g. Fair enough. But i have the Kindle2 and i think it's perfect)
+        # Remove duplicate in tweet preserving order (e.g. Fair enough. But i have the Kindle2 and i think it's perfect)
         # TODO: it should be done only for duplicate "stop word"
         text_list = []
         for word in text:
+            # replace two or more with two occurrences
+            word = self.replaceTwoOrMore(word)
+
+            # # check if the word stats with an alphabet
+            # val = re.search(r"^[a-zA-Z][a-zA-Z0-9]*$", word)
+
             if word not in text_list:
                 text_list.append(word)
 
+        #ignore if it is a stop word
         for ws in stop_words:
             if ws in text_list:
                 text_list.remove(ws)
@@ -92,15 +105,23 @@ class TweetPreProcessing:
         # remove withe space (like trim)
         return text.strip()
 
+    # start replaceTwoOrMore
+    def replaceTwoOrMore(self, text):
+        # look for 2 or more repetitions of character and replace with the character itself
+        pattern = re.compile(r"(.)\1{1,}", re.DOTALL)
+        return pattern.sub(r"\1\1", text)
+
 
     def getPolarity(self, text):
 
-        if text[0] in '0':
-            polarity = 'negative'
-        elif text[0] in '2':
-            polarity = 'neutral'
-        else:
-            polarity = 'positive'
+        # if text[0] in '0':
+        #     polarity = 'negative'
+        # elif text[0] in '2':
+        #     polarity = 'neutral'
+        # else:
+        #     polarity = 'positive'
+
+        polarity = text[0]
 
         return polarity
 
@@ -132,13 +153,20 @@ class TweetPreProcessing:
 
     def TweetBuilder(self, text):
 
-        # text = yaml.load(text)
+        ############ FOR TRAINING ############
+        # for word in text:
+        #         loc = text.index(word)
+        #         text[loc] = word.replace('"','')
+        ############ FOR TRAINING ############
+
+        ############ STREAMING ############
         text = json.loads(text.decode('ascii'))
 
         # turn unicode list elements into string element
         for word in text:
             loc = text.index(word)
             text[loc] = str(word)
+        ############ STREAMING ############
 
         polarity = self.getPolarity(text)
         # print(polarity)
@@ -153,7 +181,7 @@ class TweetPreProcessing:
         tweet = self.getTweet(text)
         # print(tweet)
 
-        tweet_stemmed = self.stemming(tweet)
+        tweet_stemmed = self.processTweet(tweet)
 
 
         # tweets = (tweet_stemmed,polarity)
@@ -162,7 +190,9 @@ class TweetPreProcessing:
 
         # print(type(tweets))
         # print(tweets)
+
         tweets = []
-        tweets.append((tweet_stemmed, id))
+        tweets.append((polarity, tweet_stemmed))
+
 
         return tweets

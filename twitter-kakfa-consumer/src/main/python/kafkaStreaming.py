@@ -5,44 +5,26 @@ from __future__ import print_function
 # sys.path.append('/Users/davidenardone/PycharmProjects/TwitterSentimentAnalysis/twitter-kakfa-consumer/src/main/python')
 import os
 import ConfigParser
+import pickle
 import re
 from pyspark import SparkContext
 from pyspark.streaming import StreamingContext
 from pyspark.streaming.kafka import KafkaUtils
 from TweetPreProcessing import TweetPreProcessing
-from pyspark.mllib.feature import HashingTF
 from pyspark.mllib.classification import NaiveBayes, NaiveBayesModel
 from pyspark.mllib.linalg import Vectors
 from pyspark.mllib.regression import LabeledPoint
+from pyspark.mllib.feature import HashingTF
+from pyspark.mllib.feature import IDF
+from pyspark.mllib.linalg import Vectors
+from pyspark.mllib.regression import LabeledPoint
 
-from random import randint
-
-
-# def stemming(text):
-#
-#     # TODO: Remove all URLs(e.g.www.xyz.com), hash tags(e.g.  # topic), targets (@username)
-#     # TODO: Correct the spellings; sequence of repeated characters is to be handled
-#
-#     # Remove punctualization, Symbols and number
-#     text = text.lower().strip()
-#     text = re.sub("[^0-9a-zA-Z ]", '', text)
-#
-#     # Remove stop words
-#     stop_words = [];
-#     # test = 'not'
-#     with open('/Users/davidenardone/PycharmProjects/TwitterSentimentAnalysis/twitter-kakfa-consumer/src/main/resources/stopwords.txt') as f:
-#         for line in f:
-#             stop_words.append(line.replace("\n", ""))
-#
-#     if text in stop_words:
-#         text = text.replace(text, '')
-#
-#     return text
 
 
 def sortByValue(rdd):
 
     return rdd.sortBy(lambda x: x[1] ,ascending=False)
+
 
 
 def word_features(rdd):
@@ -62,13 +44,11 @@ def word_features(rdd):
         htf = HashingTF(100)
         tf = htf.transform(ws)
 
-
-        print(tf)
-
-
+        # print(tf)
         # rdd = rdd.keys()
 
         return rdd
+
 
 
 # new_values is a list
@@ -115,8 +95,20 @@ if __name__ == "__main__":
     )
 
     #setting checkpoint
-    ssc.checkpoint("checkpoint")
+    # ssc.checkpoint("checkpoint")
 
+
+    # Loading TF MODEL and compute TF-IDF
+
+    print('Loading TRAINING_TF_MODEL...')
+    tf_training = sc.pickleFile('/Users/davidenardone/Desktop/TF_MODEL')
+
+    print('Computing TF-IDF MODEL...')
+    idf_training = IDF().fit(tf_training)
+    tfidf_training = idf_training.transform(tf_training)
+
+    print('Loading Naive Bayes Model...')
+    NBM = NaiveBayesModel.load(sc, "/Users/davidenardone/Desktop/NaiveBayesModel")
 
 
     kafkaParams = {'metadata.broker.list"': kafka_brokers}
@@ -136,13 +128,28 @@ if __name__ == "__main__":
     # stemming(lines).pprint()
     # tweets = lines.flatMap(lambda line: line.split(" "))\
 
-    tweets = lines.flatMap(obj1.TweetBuilder)
-    feature_words = tweets.flatMap(lambda x: x[0])\
-                    .map(lambda word: (word, 1))\
-                    .updateStateByKey(updateFunc)\
-                    .transform(sortByValue) \
-                    .transform(word_features) \
-                    .pprint(30)
+    tweet = lines.flatMap(obj1.TweetBuilder)
+
+    hashingTF = HashingTF()
+
+    #computing TF-IDF for each tweet and classifying it
+    tf_tweet = tweet.map(lambda tup: hashingTF.transform(tup[1])) \
+                    .transform(lambda tup: idf_training.transform(tup))\
+                    .map(lambda p: NBM.predict(p))\
+                    .pprint()
+
+
+    ssc.start()
+    ssc.awaitTermination()
+
+
+    # feature_words = tweets.flatMap(lambda x: x[0])
+                    # .map(lambda word: (word, 1))\
+                    # .updateStateByKey(updateFunc)\
+                    # .transform(sortByValue) \
+                    # .transform(word_features) \
+                    # .pprint(30)
+
 
 
 
@@ -159,5 +166,101 @@ if __name__ == "__main__":
     # .pprint()
 
 
-    ssc.start()
-ssc.awaitTermination()
+
+    ################################################TRAININING MODEL##########################################
+
+
+
+    # sc = SparkContext(appName="TrainingBayesModel")
+    # ssc = StreamingContext(sc, 1)
+    #
+    # allData = sc.textFile(
+    #                     "/Users/davidenardone/twitterDataset/twitter/test_data.txt",
+    #                       use_unicode=False
+    #                      )
+    #
+    # obj1 = TweetPreProcessing()
+    #
+    # data = allData.map(lambda x: x.replace("\'",''))\
+    #               .map(lambda x: x.split('",'))\
+    #               .flatMap(obj1.TweetBuilder)
+    #
+    #
+    # training, test = data.randomSplit([0.7, 0.3], seed=0)
+    #
+    # hashingTF = HashingTF()
+    #
+    # print('computing TF-IDF...')
+    #
+    # tf_training = training.map(lambda tup: hashingTF.transform(tup[1]))
+    #
+    # # tf_training.foreach(print)
+    # # print('Saving TF_MODEL...')
+    # # tf_training.saveAsPickleFile('/Users/davidenardone/Desktop/TF_MODEL')
+    #
+    # idf_training = IDF().fit(tf_training)
+    #
+    # tfidf_training = idf_training.transform(tf_training)
+    #
+    # tfidf_idx = tfidf_training.zipWithIndex()
+    #
+    # training_idx = training.zipWithIndex()
+    #
+    # idx_training = training_idx.map(lambda line: (line[1], line[0]))
+    #
+    # idx_tfidf = tfidf_idx.map(lambda l: (l[1], l[0]))
+    #
+    # joined_tfidf_training = idx_training.join(idx_tfidf)
+    #
+    # training_labeled = joined_tfidf_training.map(lambda tup: tup[1])
+    #
+    # # labeled_training_data.foreach(print)
+    #
+    # labeled_training_data = training_labeled.map(lambda k: LabeledPoint(k[0][0], k[1]))
+    #
+    # print('computing Naive Bayes Model...')
+    #
+    # model = NaiveBayes.train(labeled_training_data, 1.0)
+    #
+    # print('Saving Naive Bayes Model...')
+    #
+    # model.save(sc, "/Users/davidenardone/Desktop/NaiveBayesModel_2")
+    #
+    # tf_test = test.map(lambda tup: hashingTF.transform(tup[1]))
+    #
+    # idf_test = IDF().fit(tf_test)
+    #
+    # tfidf_test = idf_test.transform(tf_test)
+    #
+    # tfidf_idx = tfidf_test.zipWithIndex()
+    #
+    # test_idx = test.zipWithIndex()
+    #
+    # idx_test = test_idx.map(lambda line: (line[1], line[0]))
+    #
+    # idx_tfidf = tfidf_idx.map(lambda l: (l[1], l[0]))
+    #
+    # joined_tfidf_test = idx_test.join(idx_tfidf)
+    #
+    # test_labeled = joined_tfidf_test.map(lambda tup: tup[1])
+    #
+    # labeled_test_data = test_labeled.map(lambda k: LabeledPoint(k[0][0], k[1]))
+    #
+    # # labeled_training_data.foreach(lambda p: p.f)
+    # # exit(-1)
+    #
+    # predictionAndLabel = labeled_test_data.map(lambda p: (model.predict(p.features), p.label))
+    #
+    # accuracy = 1.0 * predictionAndLabel.filter(lambda (x, v): x == v).count() / labeled_test_data.count()
+    #
+    # print(accuracy)
+    #
+    # labeled_2 = test_labeled.map(lambda k: (k[0][1], LabeledPoint(k[0][0], k[1])))
+    #
+    # predictionAndLabel2 = labeled_2.map(lambda p: [p[0], model.predict(p[1].features), p[1].label])
+    #
+    # accuracy = 1.0 * predictionAndLabel2.filter(lambda (x, v): x == v).count() / labeled_test_data.count()
+    #
+    # print(accuracy)
+
+    ################################################TRAININING MODEL########################################
