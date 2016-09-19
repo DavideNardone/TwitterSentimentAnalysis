@@ -4,6 +4,7 @@ import os
 import time
 import json
 import csv
+import random
 from kafka import KafkaProducer
 import ConfigParser
 
@@ -30,16 +31,20 @@ if __name__ == "__main__":
     # read text file tab-separated
     text_file = list(
         csv.reader(
-            open('/Users/davidenardone/twitterDataset/twitter/test_data.txt', 'rU')
+            open('/Users/davidenardone/twitterDataset/twitter/testing_data.txt', 'rU')
+            # open('/Users/davidenardone/Desktop/kmeans_data.txt', 'rU')
             # delimiter = '\t',
             # lineterminator='\r\n',
             # quoting=csv.QUOTE_ALL
         )
     )
 
+    # shuffling data
+    random.shuffle(text_file)
+
     for row in text_file:
         time.sleep(1)
         # text = str(row)
-        # print(text)
+        print(row)
         jd = json.dumps(row).encode('ascii')
         producer.send(kafka_topic,jd)

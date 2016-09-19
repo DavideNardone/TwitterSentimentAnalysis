@@ -7,6 +7,8 @@ import os
 import ConfigParser
 import pickle
 import re
+import datetime
+import math
 from pyspark import SparkContext
 from pyspark.streaming import StreamingContext
 from pyspark.streaming.kafka import KafkaUtils
@@ -18,6 +20,9 @@ from pyspark.mllib.feature import HashingTF
 from pyspark.mllib.feature import IDF
 from pyspark.mllib.linalg import Vectors
 from pyspark.mllib.regression import LabeledPoint
+from lightning import Lightning
+from numpy import random, array
+import numpy as np
 
 
 
@@ -30,7 +35,7 @@ def sortByValue(rdd):
 def word_features(rdd):
 
 
-        # replicate frequencies words to create the dictioanry fro TF-IDF
+        # replicate frequencies words to create the dictionary from TF-IDF
         ws = []
         for x in rdd.toLocalIterator():
             word = x[0]
@@ -50,23 +55,103 @@ def word_features(rdd):
         return rdd
 
 
+# def test(lp):
+#     #
+#     # broadcastVar.value -=1
+#     # print(broadcastVar.value)
 
 # new_values is a list
 # last_sum is an integer
-def updateFunc(new_values,last_sum):
+# def updateFunc(new_values,last_sum):
+#
+#     # return new_values
+#     return sum(new_values) + (last_sum or 0)
 
-    # return new_values
-    return sum(new_values) + (last_sum or 0)
+def updateFunction(newValues, runningCount):
+    if runningCount is None:
+       runningCount = 0
+    return sum(newValues, runningCount)  # add the new values with the previous running count to get the new count
+
+# def test(rdd):
+#
+#     print(rdd.toDense)
 
 
+
+def plotStreaming(lp):
+
+    # print(arg1)
+    # print(type(lp))
+    # pos = 0
+    # neg = 0
+
+
+    now = datetime.datetime.now()
+    now2 = now.strftime('%H:%M:%S')
+
+    # Convert string to list
+    tn = now2.split(":")
+
+    # print(now2)
+
+    gt = lp[0]
+    predicted = lp[1]
+
+    hour = int(tn[0])
+    min = int(tn[1])
+    sec = int(tn[2])
+
+    # print(hour)
+    # print(min)
+    # print(sec)
+
+    #TODO: implement better !!!!
+    val =  (hour * 3600) + (min * 60) + (sec)
+
+    print('gt=' + str(gt) + ', predicted=' + str(predicted))
+    if(int(gt)==0):
+        if (int(gt) == int(predicted)):
+            viz.append(np.array([1]))
+        else:
+            viz.append(np.array([0]))
+    elif (int(gt)==4):
+        if (int(gt) == int(predicted)):
+            viz2.append(np.array([1]))
+        else:
+            viz2.append(np.array([0]))
+    # if( (int(gt)==int(predicted)) and int(gt)==4):
+    #     # print('classified wrongly')
+    #     viz2.append(np.array([[1], [0]]))
+
+
+
+
+# spark-submit --jars ~/workspace_spark/spark-1.6.2-bin-hadoop2.6/external/spark-streaming-kafka-assembly_2.10-1.6.2.jar --py-files modules/TweetPreProcessing.py,modules/Emoticons.py,modules/Acronyms.py ~/PycharmProjects/TwitterSentimentAnalysis/twitter-kakfa-consumer/src/main/python/kafkaStreaming.py
 if __name__ == "__main__":
 
-    # if len(sys.argv) != 3:
-    #     print("Usage: kafka_wordcount.py <zk> <topic>", file=sys.stderr)
-    #     exit(-1)
+    global lgn
+    global viz,viz2
 
-    # print(os.getcwd())
-    # exit(-1)
+
+    # setting visualization tool
+    lgn = Lightning(host='http://localhost:3000/')
+    # lgn.use_session('e590c719-219c-4381-85eb-41e65fa793d9')
+    lgn.create_session('Tweets Classification using Naive Bayes')
+
+    viz = lgn.linestreaming(
+        np.array([0]), color = [0, 255, 0],
+        description = 'Classification of POSITIVE tweets',
+        xaxis = 'i-th tweet',
+        yaxis = 'classification\'s value'
+        )
+    viz2 = lgn.linestreaming(
+        np.array([0]),
+        color = [255, 100, 100],
+        description = 'Classification of NEGATIVE tweets',
+        xaxis='i-th tweet',
+        yaxis='classification\'s value'
+    )
+
 
     config = ConfigParser.ConfigParser()
     # print(os.getcwd())
@@ -94,22 +179,20 @@ if __name__ == "__main__":
         int(spark_batch_duration)
     )
 
-    #setting checkpoint
-    # ssc.checkpoint("checkpoint")
-
+    # setting checkpoint
+    # ssc.checkpoint(".")
 
     # Loading TF MODEL and compute TF-IDF
-
     print('Loading TRAINING_TF_MODEL...')
     tf_training = sc.pickleFile('/Users/davidenardone/Desktop/TF_MODEL')
 
     print('Computing TF-IDF MODEL...')
+    global idf_training
     idf_training = IDF().fit(tf_training)
-    tfidf_training = idf_training.transform(tf_training)
+    # tfidf_training = idf_training.transform(tf_training)
 
     print('Loading Naive Bayes Model...')
     NBM = NaiveBayesModel.load(sc, "/Users/davidenardone/Desktop/NaiveBayesModel")
-
 
     kafkaParams = {'metadata.broker.list"': kafka_brokers}
 
@@ -120,7 +203,6 @@ if __name__ == "__main__":
         {"metadata.broker.list": kafka_brokers}
     )
 
-
     obj1 = TweetPreProcessing()
 
     lines = kvs.map(lambda x: x[1])
@@ -130,17 +212,38 @@ if __name__ == "__main__":
 
     tweet = lines.flatMap(obj1.TweetBuilder)
 
+    label = tweet.map(lambda tup: tup[0]) \
+        .transform(lambda x: x.zipWithUniqueId()) \
+        .map(lambda line: (line[1], int(line[0])))
+
+    # int() casting string 'label' to int
+
     hashingTF = HashingTF()
 
     #computing TF-IDF for each tweet and classifying it
     tf_tweet = tweet.map(lambda tup: hashingTF.transform(tup[1])) \
-                    .transform(lambda tup: idf_training.transform(tup))\
-                    .map(lambda p: NBM.predict(p))\
-                    .pprint()
+                    .transform(lambda tup: idf_training.transform(tup)) \
+                    .map(lambda p: int(NBM.predict(p)))\
+                    .transform(lambda p: p.zipWithUniqueId()) \
+                    .map(lambda line: (line[1], line[0])) \
+                    # .pprint()
 
+    # Here the ground truth and the predicted class are joined
+    # so, for each tweet we have the following structure:
+    # (class_predicted, ground truth) i.e. (4,0),(0,0)
+
+    cc = label.join(tf_tweet) \
+            .map(lambda tup: tup[1]) \
+            .map(plotStreaming) \
+            .pprint()
+
+
+            # .map(lambda tup: (tup,1)) \
+            # .pprint()
 
     ssc.start()
     ssc.awaitTermination()
+
 
 
     # feature_words = tweets.flatMap(lambda x: x[0])
@@ -149,8 +252,6 @@ if __name__ == "__main__":
                     # .transform(sortByValue) \
                     # .transform(word_features) \
                     # .pprint(30)
-
-
 
 
     # tweets = lines.flatMap(obj1.TweetBuilder)
@@ -167,7 +268,7 @@ if __name__ == "__main__":
 
 
 
-    ################################################TRAININING MODEL##########################################
+    ################################################TRAINING MODEL##########################################
 
 
 
