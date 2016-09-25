@@ -151,45 +151,6 @@ class TweetPreProcessing:
 
             return tweet
 
-
-    def ProcessTrainingTweets(self,text):
-
-        # text = json.loads(text.decode('ascii'))
-        ############ FOR TRAINING ############
-        for word in text:
-            loc = text.index(word)
-            text[loc] = word.replace('"','')
-        ############ FOR TRAINING ############
-
-        polarity = self.getPolarity(text)
-        # print(polarity)
-        id = self.getId(text)
-        # print(id)
-        # date = self.getDate(text)
-        # print(date)
-        # query = self.getQuery(text)
-        # print(query)
-        # sender = self.getSender(text)
-        # print(sender)
-        tweet = self.getTweet(text)
-        # print(tweet)
-
-        tweet_stemmed = self.processTweet(tweet)
-
-        # tweets = (tweet_stemmed,polarity)
-
-        # tweets = tweet_stemmed + polarity
-
-        # print(type(tweets))
-        # print(tweets)
-
-        tweets = []
-        tweets.append((polarity, tweet_stemmed))
-
-        return tweets
-
-
-
     def TweetBuilder(self, text):
 
         ############ FOR TRAINING ############
@@ -198,14 +159,14 @@ class TweetPreProcessing:
         #         text[loc] = word.replace('"','')
         ############ FOR TRAINING ############
 
-        ############ STREAMING ############
-        text = json.loads(text.decode('ascii'))
-
-        # turn unicode list elements into string element
-        for word in text:
-            loc = text.index(word)
-            text[loc] = str(word)
-        ############ STREAMING ############
+        # ############ STREAMING ############
+        # text = json.loads(text.decode('ascii'))
+        #
+        # # turn unicode list elements into string element
+        # for word in text:
+        #     loc = text.index(word)
+        #     text[loc] = str(word)
+        # ############ STREAMING ############
 
         polarity = self.getPolarity(text)
         # print(polarity)

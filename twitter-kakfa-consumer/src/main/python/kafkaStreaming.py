@@ -1,179 +1,122 @@
 from __future__ import print_function
 
-
-# import sys
-# sys.path.append('/Users/davidenardone/PycharmProjects/TwitterSentimentAnalysis/twitter-kakfa-consumer/src/main/python')
-import os
 import ConfigParser
-import pickle
-import re
-import datetime
-import math
 from pyspark import SparkContext
+from pyspark.sql import SQLContext
 from pyspark.streaming import StreamingContext
 from pyspark.streaming.kafka import KafkaUtils
 from TweetPreProcessing import TweetPreProcessing
-from pyspark.mllib.classification import NaiveBayes, NaiveBayesModel
-from pyspark.mllib.linalg import Vectors
-from pyspark.mllib.regression import LabeledPoint
+from pyspark.mllib.classification import NaiveBayesModel
+from pyspark.sql import Row
+import datetime
+import os
+import json
 from pyspark.mllib.feature import HashingTF
 from pyspark.mllib.feature import IDF
-from pyspark.mllib.linalg import Vectors
-from pyspark.mllib.regression import LabeledPoint
-from lightning import Lightning
-from numpy import random, array
-import numpy as np
+from pyspark.sql.types import *
 
 
 
-def sortByValue(rdd):
+def decodeUnicode(text):
 
-    return rdd.sortBy(lambda x: x[1] ,ascending=False)
+    text = json.loads(text.decode('ascii'))
 
+    # turn unicode list elements into string element
+    for word in text:
+        loc = text.index(word)
+        text[loc] = str(word)
 
+    return text
 
-def word_features(rdd):
+# Lazily instantiated global instance of SQLContext
+def getSqlContextInstance(sparkContext):
+    if ('sqlContextSingletonInstance' not in globals()):
+        globals()['sqlContextSingletonInstance'] = SQLContext(sparkContext)
+    return globals()['sqlContextSingletonInstance']
 
+def jdbcInsert(rdd):
 
-        # replicate frequencies words to create the dictionary from TF-IDF
-        ws = []
-        for x in rdd.toLocalIterator():
-            word = x[0]
-            freq = int(x[1])
-            for i in range(freq):
-                ws.append(word)
+    #  Get the singleton instance of SQLContext
+    sqlContext = getSqlContextInstance(rdd.context)
 
-        # print(ws)
+    # Convert RDD[String] to RDD[Row] to DataFrame
+    rowRdd = rdd.map(lambda w: Row(gt=w[0], predicted=w[1]))
 
-        # creating feature vector from ws
-        htf = HashingTF(100)
-        tf = htf.transform(ws)
+    if(rowRdd.isEmpty() != True):
+        DataFrame = sqlContext.createDataFrame(rowRdd)
+        DataFrame.write.jdbc(MYSQL_CONNECTION_URL.value, tableName.value, mode = 'append')
+    else:
+        return
 
-        # print(tf)
-        # rdd = rdd.keys()
+def createUniqueTableName(name):
 
-        return rdd
-
-
-# def test(lp):
-#     #
-#     # broadcastVar.value -=1
-#     # print(broadcastVar.value)
-
-# new_values is a list
-# last_sum is an integer
-# def updateFunc(new_values,last_sum):
-#
-#     # return new_values
-#     return sum(new_values) + (last_sum or 0)
-
-def updateFunction(newValues, runningCount):
-    if runningCount is None:
-       runningCount = 0
-    return sum(newValues, runningCount)  # add the new values with the previous running count to get the new count
-
-# def test(rdd):
-#
-#     print(rdd.toDense)
-
-
-
-def plotStreaming(lp):
-
-    # print(arg1)
-    # print(type(lp))
-    # pos = 0
-    # neg = 0
-
-
-    now = datetime.datetime.now()
-    now2 = now.strftime('%H:%M:%S')
+    now = datetime.datetime.now().strftime('%d:%H:%M:%S')
 
     # Convert string to list
-    tn = now2.split(":")
+    tn = now.split(":")
 
-    # print(now2)
+    day = tn[0]
+    hour = tn[1]
+    min = tn[2]
+    sec = tn[3]
 
-    gt = lp[0]
-    predicted = lp[1]
+    # table name i.e k_means_24_1_21_20
+    table_name = name+'_'+day+'_'+hour+'_'+min+'_'+sec
 
-    hour = int(tn[0])
-    min = int(tn[1])
-    sec = int(tn[2])
-
-    # print(hour)
-    # print(min)
-    # print(sec)
-
-    #TODO: implement better !!!!
-    val =  (hour * 3600) + (min * 60) + (sec)
-
-    print('gt=' + str(gt) + ', predicted=' + str(predicted))
-    if(int(gt)==0):
-        if (int(gt) == int(predicted)):
-            viz.append(np.array([1]))
-        else:
-            viz.append(np.array([0]))
-    elif (int(gt)==4):
-        if (int(gt) == int(predicted)):
-            viz2.append(np.array([1]))
-        else:
-            viz2.append(np.array([0]))
-    # if( (int(gt)==int(predicted)) and int(gt)==4):
-    #     # print('classified wrongly')
-    #     viz2.append(np.array([[1], [0]]))
-
+    return table_name
 
 
 
 # spark-submit --jars ~/workspace_spark/spark-1.6.2-bin-hadoop2.6/external/spark-streaming-kafka-assembly_2.10-1.6.2.jar --py-files modules/TweetPreProcessing.py,modules/Emoticons.py,modules/Acronyms.py ~/PycharmProjects/TwitterSentimentAnalysis/twitter-kakfa-consumer/src/main/python/kafkaStreaming.py
 if __name__ == "__main__":
 
-    global lgn
-    global viz,viz2
-
-
-    # setting visualization tool
-    lgn = Lightning(host='http://localhost:3000/')
-    # lgn.use_session('e590c719-219c-4381-85eb-41e65fa793d9')
-    lgn.create_session('Tweets Classification using Naive Bayes')
-
-    viz = lgn.linestreaming(
-        np.array([0]), color = [0, 255, 0],
-        description = 'Classification of POSITIVE tweets',
-        xaxis = 'i-th tweet',
-        yaxis = 'classification\'s value'
-        )
-    viz2 = lgn.linestreaming(
-        np.array([0]),
-        color = [255, 100, 100],
-        description = 'Classification of NEGATIVE tweets',
-        xaxis='i-th tweet',
-        yaxis='classification\'s value'
-    )
-
-
     config = ConfigParser.ConfigParser()
-    # print(os.getcwd())
-    config.read('/Users/davidenardone/PycharmProjects/TwitterSentimentAnalysis/twitter-kakfa-consumer/conf/consumer.conf')
+    wd = os.getcwd()
+    config.read(wd+'/PycharmProjects/TwitterSentimentAnalysis/twitter-kakfa-consumer/conf/consumer.conf')
 
-    #reading configuration
+    #READING CONFIGURATION
     app_name = config.get('Spark configurations', 'spark.app.name')
     spark_master = config.get('Spark configurations', 'spark.master')
     spark_batch_duration = config.get('Spark configurations', 'spark.batch.duration')
 
-    kafka_topic = config.get('Kafka configurations', 'kafka.topics').replace('"', '''''')
-    kafka_brokers = config.get('Kafka configurations', 'kafka.brokers').replace('"', '''''')
+    kafka_topic = config.get('Kafka configurations', 'kafka.topics')
+    kafka_brokers = config.get('Kafka configurations', 'kafka.brokers')
 
-    # Create Spark context
+    # CREATE SPARK CONTEXT
     # TODO: check whether is possible to set other variables such as: pyFiles, jars, ecc
     sc = SparkContext(
         appName = app_name,
         master  = spark_master
     )
 
+    properties = ConfigParser.ConfigParser()
+    properties.read(wd+'/PycharmProjects/TwitterSentimentAnalysis/db/db-properties.conf')
+    db = properties.get('jdbc configurations', 'database')
+    user = properties.get('jdbc configurations', 'user')
+    passwd  = properties.get('jdbc configurations', 'password')
 
-    # Create Streaming context
+    sqlContext = SQLContext(sc)
+
+    tableName = sc.broadcast(createUniqueTableName('NBM'))
+    MYSQL_CONNECTION_URL = sc.broadcast(
+        'jdbc:mysql://localhost:3306/' + db + '?user=' + user + '&password=' + passwd + '&useUnicode=true&useJDBCCompliantTimezoneShift=true&useLegacyDatetimeCode=false&serverTimezone=UTC&useSSL=false')
+
+    # CREATE TABLE SCHEMA
+    schema = StructType([
+        StructField("gt", IntegerType(), True),
+        StructField("predicted", IntegerType(), True)])
+
+
+    dfTableSchema = sqlContext.createDataFrame(sc.emptyRDD(), schema)
+    dfTableSchema.write.jdbc(MYSQL_CONNECTION_URL.value, tableName.value, mode = 'error')
+
+    # LOAD JDBC PROPERTIES
+    df = sqlContext.read.format('jdbc')\
+                        .options(url = MYSQL_CONNECTION_URL.value,
+                                 dbtable = db+'.'+tableName.value
+                                ).load()
+
+    # CREATE STREAMING CONTEXT
     ssc = StreamingContext(
         sc,
         int(spark_batch_duration)
@@ -182,89 +125,68 @@ if __name__ == "__main__":
     # setting checkpoint
     # ssc.checkpoint(".")
 
-    # Loading TF MODEL and compute TF-IDF
-    print('Loading TRAINING_TF_MODEL...')
+    #
+    # LOADING AND COMPUTING TF's TRAINING MODEL
+    print('Loading TRAINING_TF_MODEL...',end="")
     tf_training = sc.pickleFile('/Users/davidenardone/Desktop/TF_MODEL')
+    print('done!')
 
-    print('Computing TF-IDF MODEL...')
+    print('Computing TF-IDF MODEL...',end="")
     global idf_training
     idf_training = IDF().fit(tf_training)
-    # tfidf_training = idf_training.transform(tf_training)
+    print('done!')
 
-    print('Loading Naive Bayes Model...')
+    print('Loading Naive Bayes Model...',end="")
     NBM = NaiveBayesModel.load(sc, "/Users/davidenardone/Desktop/NaiveBayesModel")
+    print('done!')
 
     kafkaParams = {'metadata.broker.list"': kafka_brokers}
 
-    # Create direct kafka stream with brokers and topics
-    kvs = KafkaUtils.createDirectStream(
+    # CREATE DIRECT KAFKA STREAM WITH BROKERS AND TOPICS
+    streamData = KafkaUtils.createDirectStream(
         ssc,
         [kafka_topic],
         {"metadata.broker.list": kafka_brokers}
     )
 
+
+    ######### FROM NOW ON, EACH ACTION OR TRANSFORMATION IS DONE ON A SINGLE INCOMING BATCH OF TWEETS #########
+
+    # PRE-PROCESSING TWEETS DATA (TESTING)
     obj1 = TweetPreProcessing()
+    tweet = streamData.map(lambda x: x[1]) \
+                      .map(decodeUnicode)\
+                      .flatMap(obj1.TweetBuilder)\
 
-    lines = kvs.map(lambda x: x[1])
 
-    # stemming(lines).pprint()
-    # tweets = lines.flatMap(lambda line: line.split(" "))\
-
-    tweet = lines.flatMap(obj1.TweetBuilder)
-
+    #RETRIEVING TWEET's TEXT and LABEL
+    # ZIPPING EACH TWEET WITH UNIQUE ID
     label = tweet.map(lambda tup: tup[0]) \
         .transform(lambda x: x.zipWithUniqueId()) \
         .map(lambda line: (line[1], int(line[0])))
-
     # int() casting string 'label' to int
 
-    hashingTF = HashingTF()
+    text = tweet.map(lambda tup: tup[1])
 
     #computing TF-IDF for each tweet and classifying it
-    tf_tweet = tweet.map(lambda tup: hashingTF.transform(tup[1])) \
+    hashingTF = HashingTF()
+    tfidf_testing = text.map(lambda tup: hashingTF.transform(tup)) \
                     .transform(lambda tup: idf_training.transform(tup)) \
-                    .map(lambda p: int(NBM.predict(p)))\
-                    .transform(lambda p: p.zipWithUniqueId()) \
-                    .map(lambda line: (line[1], line[0])) \
-                    # .pprint()
+
+    tweet_classified = tfidf_testing.map(lambda p: int(NBM.predict(p)))\
+                                            .transform(lambda p: p.zipWithUniqueId()) \
+                                            .map(lambda line: (line[1], line[0])) \
+                                            # .pprint()
 
     # Here the ground truth and the predicted class are joined
     # so, for each tweet we have the following structure:
     # (class_predicted, ground truth) i.e. (4,0),(0,0)
-
-    cc = label.join(tf_tweet) \
+    result = label.join(tweet_classified) \
             .map(lambda tup: tup[1]) \
-            .map(plotStreaming) \
-            .pprint()
-
-
-            # .map(lambda tup: (tup,1)) \
-            # .pprint()
+            .foreachRDD(jdbcInsert)
 
     ssc.start()
     ssc.awaitTermination()
-
-
-
-    # feature_words = tweets.flatMap(lambda x: x[0])
-                    # .map(lambda word: (word, 1))\
-                    # .updateStateByKey(updateFunc)\
-                    # .transform(sortByValue) \
-                    # .transform(word_features) \
-                    # .pprint(30)
-
-
-    # tweets = lines.flatMap(obj1.TweetBuilder)
-    # .map(lambda word: (word, 1)) \
-    #     .map(lambda (k, v): (tuple(k), v)) \
-    #     .pprint()
-    # .reduceByKey(lambda x,y: x+y)\
-    # .updateStateByKey(updateFunc)\
-    # .pprint()
-    # .transform(word_features)\
-    # .pprint()
-    # .transform(sortByValue)\
-    # .pprint()
 
 
 
