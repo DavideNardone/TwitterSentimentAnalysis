@@ -1,14 +1,13 @@
 from __future__ import print_function
-
-
 from TweetPreProcessing import TweetPreProcessing
 from pyspark.mllib.clustering import StreamingKMeans
-import ConfigParser
 from pyspark import SparkContext
 from pyspark.sql import SQLContext
 from pyspark.sql import Row
+import ConfigParser
 import datetime
 import json
+import os
 from pyspark.streaming import StreamingContext
 from pyspark.streaming.kafka import KafkaUtils
 from pyspark.mllib.regression import LabeledPoint
@@ -22,12 +21,12 @@ def decodeUnicode(text):
 
     text = json.loads(text.decode('ascii'))
 
+    text_list = []
     # turn unicode list elements into string element
     for word in text:
-        loc = text.index(word)
-        text[loc] = str(word)
+        text_list.append(word.encode("utf-8"))
 
-    return text
+    return text_list
 
 # Lazily instantiated global instance of SQLContext
 def getSqlContextInstance(sparkContext):
@@ -65,7 +64,8 @@ def createUniqueTableName(name):
     sec = tn[3]
 
     # table name i.e k_means_24_1_21_20
-    table_name = name+'_'+day+'_'+hour+'_'+min+'_'+sec
+    # table_name = name+'_'+day+'_'+hour+'_'+min+'_'+sec
+    table_name = 'test_kmeans'
 
     return table_name
 
@@ -73,17 +73,16 @@ def createUniqueTableName(name):
 
 if __name__ == "__main__":
 
-
     config = ConfigParser.ConfigParser()
-    config.read('/Users/davidenardone/PycharmProjects/TwitterSentimentAnalysis/twitter-kakfa-consumer/conf/consumer.conf')
+    config.read(os.getcwd()+'/PycharmProjects/TwitterSentimentAnalysis/twitter-kakfa-consumer/conf/consumer.conf')
 
     # READING CONFIGURATION
     app_name = config.get('Spark configurations', 'spark.app.name')
     spark_master = config.get('Spark configurations', 'spark.master')
     spark_batch_duration = config.get('Spark configurations', 'spark.batch.duration')
 
-    kafka_topic = config.get('Kafka configurations', 'kafka.topics')
-    kafka_brokers = config.get('Kafka configurations', 'kafka.brokers')
+    kafka_topic = config.get('Kafka configurations', 'kafka.topic')
+    kafka_brokers = config.get('Kafka configurations', 'kafka.broker')
 
     # CREATE SPARK CONTEXT
     # TODO: check whether is possible to set other variables such as: pyFiles, jars, ecc
@@ -93,7 +92,7 @@ if __name__ == "__main__":
     )
 
     properties = ConfigParser.ConfigParser()
-    properties.read('/Users/davidenardone/PycharmProjects/TwitterSentimentAnalysis/db/db-properties.conf')
+    properties.read(os.getcwd()+'/PycharmProjects/TwitterSentimentAnalysis/db/db-properties.conf')
     db = properties.get('jdbc configurations', 'database')
     user = properties.get('jdbc configurations', 'user')
     passwd  = properties.get('jdbc configurations', 'password')
@@ -101,7 +100,11 @@ if __name__ == "__main__":
     sqlContext = SQLContext(sc)
 
     tableName = sc.broadcast(createUniqueTableName('k_means'))
-    MYSQL_CONNECTION_URL = sc.broadcast('jdbc:mysql://localhost:3306/' + db + '?user=' + user + '&password=' + passwd + '&useUnicode=true&useJDBCCompliantTimezoneShift=true&useLegacyDatetimeCode=false&serverTimezone=UTC&useSSL=false')
+    MYSQL_CONNECTION_URL = sc.broadcast(
+        'jdbc:mysql://localhost:3306/' + db
+         + '?user=' + user
+         + '&password=' + passwd
+         + '&useUnicode=true&useJDBCCompliantTimezoneShift=true&useLegacyDatetimeCode=false&serverTimezone=UTC&useSSL=false')
 
     # CREATE TABLE SCHEMA
     schema = StructType([
@@ -129,7 +132,7 @@ if __name__ == "__main__":
 
     # LOADING TRAINING DATA FROM FILE
     data = sc.textFile(
-        "/Users/davidenardone/twitterDataset/twitter/training_data.txt",
+        os.getcwd()+"/twitterDataset/twitter/training_data.txt",
         use_unicode = False
     )
 
@@ -140,19 +143,21 @@ if __name__ == "__main__":
         .map(lambda x: x.replace('"',''))\
         .flatMap(obj2.TweetBuilder)
 
-    # print(trainingData.collect())
-
-    pca_mode = sc.broadcast(1)
+    # whether set to '1', 'pca_mode' allows to use data projection on principal components
+    pca_mode = sc.broadcast(0)
     low_dim = 2
-    feature_dim = 512 # 1048576
+    feature_dim = 4096 # 1048576
     k = feature_dim
 
     # LOADING AND COMPUTING TF's TRAINING MODEL
     print('Loading TRAINING_TF_MODEL...')
-    tf_training = sc.pickleFile('/Users/davidenardone/Desktop/TF_MODEL_'+str(feature_dim))
+    tf_training = sc.pickleFile(os.getcwd()+'/Desktop/MODEL/TF/TF_MODEL_'+str(feature_dim))
+    print('done!')
+
     print('Computing TF-IDF MODEL...')
-    idf_training = IDF().fit(tf_training)
+    idf_training = IDF(minDocFreq=5).fit(tf_training)
     tfidf_training = idf_training.transform(tf_training)
+    print('done!')
 
     # APPLYING PCA ON TRAINING DATA
     if pca_mode.value==1:
@@ -160,7 +165,6 @@ if __name__ == "__main__":
         PCA_model = PCA(low_dim).fit(tfidf_training)
         tfidf_training = PCA_model.transform(tfidf_training)
         k = low_dim
-
 
     # pcArray = model.transform(tfidf_training.first()).toArray()
 
@@ -171,9 +175,18 @@ if __name__ == "__main__":
     trainingQueue = [tfidf_training]
     trainingStream = ssc.queueStream(trainingQueue)
 
+    # CREATING A K-MEANS MODEL WITH RANDOM CLUSTERS SPECIFYING THE NUMBER OF CLUSTERS TO FIND
+    model = StreamingKMeans(k=2, decayFactor=1.0,timeUnit='batches').setRandomCenters(k, 1.0, 0)
+
+    # print("K centers: " + str(model.latestModel().centers))
+
+    # TRAINING THE MODEL ON THE TRAINING TWEET'S DATA
+    print('Training K-means Model...')
+    model.trainOn(trainingStream)
+    print('done!')
+
 
     # CREATE DIRECT KAFKA STREAM WITH BROKERS AND TOPICS
-    kafkaParams = {'metadata.broker.list"': kafka_brokers}
     streamData = KafkaUtils.createDirectStream(
         ssc,
         [kafka_topic],
@@ -187,8 +200,6 @@ if __name__ == "__main__":
     tweet = streamData.map(lambda x: x[1]) \
                       .map(decodeUnicode) \
                       .flatMap(obj1.TweetBuilder)
-
-    # tweet = lines.flatMap(obj1.TweetBuilder)
 
     #RETRIEVING TWEET's TEXT and LABEL
     #ZIPPING EACH TWEET WITH UNIQUE ID
@@ -219,26 +230,15 @@ if __name__ == "__main__":
     # (0, (DenseVector([0.9679, 0.6229]), '4'))
     feature_and_label = feature_testing_zipped.join(label) \
 
-    # CREATING MODEL WITH RANDOM CLUSTERS AND SPECIFYING THE NUMBER OF CLUSTERS TO FIND
-    model = StreamingKMeans(k=3, decayFactor=1.0).setRandomCenters(k, 1.0, 0)
-
-    # print("K centers: " + str(model.latestModel().centers))
-
-    # TRAINING THE MODEL ON THE TRAINING TWEET'S DATA
-    print('Training K-means Model...')
-    model.trainOn(trainingStream)
-
     # CREATING LABELING DATA
     labeled_data = feature_and_label.map(lambda k: LabeledPoint(k[1][1], k[1][0])) \
 
     # PREDICTING THE CLUSTER WHERE THE TWEET BELONG TO
     result = model.predictOnValues(labeled_data.map(lambda lp: (lp.label, lp.features)))
 
-
     # ZIPPING EACH RESULT
     result_zipped = result.transform(lambda x: x.zipWithUniqueId()) \
                         .map(lambda line: (line[1], line[0]))\
-
 
     # PREPARING OUTPUT DATA
     # structure ( (gt, cluster predicted),(features))

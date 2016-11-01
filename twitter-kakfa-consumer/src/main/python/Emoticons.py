@@ -1,4 +1,3 @@
-
 # TODO: make Singleton
 class Emoticons:
 

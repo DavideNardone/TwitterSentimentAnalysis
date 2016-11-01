@@ -1,6 +1,4 @@
 from __future__ import print_function
-
-import ConfigParser
 from pyspark import SparkContext
 from pyspark.sql import SQLContext
 from pyspark.streaming import StreamingContext
@@ -8,6 +6,7 @@ from pyspark.streaming.kafka import KafkaUtils
 from TweetPreProcessing import TweetPreProcessing
 from pyspark.mllib.classification import NaiveBayesModel
 from pyspark.sql import Row
+import ConfigParser
 import datetime
 import os
 import json
@@ -21,12 +20,12 @@ def decodeUnicode(text):
 
     text = json.loads(text.decode('ascii'))
 
+    text_list = []
     # turn unicode list elements into string element
     for word in text:
-        loc = text.index(word)
-        text[loc] = str(word)
+        text_list.append(word.encode("utf-8"))
 
-    return text
+    return text_list
 
 # Lazily instantiated global instance of SQLContext
 def getSqlContextInstance(sparkContext):
@@ -61,13 +60,13 @@ def createUniqueTableName(name):
     sec = tn[3]
 
     # table name i.e k_means_24_1_21_20
-    table_name = name+'_'+day+'_'+hour+'_'+min+'_'+sec
+    # table_name = name+'_'+day+'_'+hour+'_'+min+'_'+sec
+    table_name = 'test_NBM'
 
     return table_name
 
 
-
-# spark-submit --jars ~/workspace_spark/spark-1.6.2-bin-hadoop2.6/external/spark-streaming-kafka-assembly_2.10-1.6.2.jar --py-files modules/TweetPreProcessing.py,modules/Emoticons.py,modules/Acronyms.py ~/PycharmProjects/TwitterSentimentAnalysis/twitter-kakfa-consumer/src/main/python/kafkaStreaming.py
+# spark-submit --jars ~/workspace_spark/spark-1.6.2-bin-hadoop2.6/external/spark-streaming-kafka-assembly_2.10-1.6.2.jar --py-files modules/TweetPreProcessing.py,modules/Emoticons.py,modules/Acronyms.py ~/PycharmProjects/TwitterSentimentAnalysis/twitter-kakfa-consumer/src/main/python/StreamingNaiveBayesClassification.py
 if __name__ == "__main__":
 
     config = ConfigParser.ConfigParser()
@@ -79,8 +78,8 @@ if __name__ == "__main__":
     spark_master = config.get('Spark configurations', 'spark.master')
     spark_batch_duration = config.get('Spark configurations', 'spark.batch.duration')
 
-    kafka_topic = config.get('Kafka configurations', 'kafka.topics')
-    kafka_brokers = config.get('Kafka configurations', 'kafka.brokers')
+    kafka_topic = config.get('Kafka configurations', 'kafka.topic')
+    kafka_brokers = config.get('Kafka configurations', 'kafka.broker')
 
     # CREATE SPARK CONTEXT
     # TODO: check whether is possible to set other variables such as: pyFiles, jars, ecc
@@ -99,7 +98,10 @@ if __name__ == "__main__":
 
     tableName = sc.broadcast(createUniqueTableName('NBM'))
     MYSQL_CONNECTION_URL = sc.broadcast(
-        'jdbc:mysql://localhost:3306/' + db + '?user=' + user + '&password=' + passwd + '&useUnicode=true&useJDBCCompliantTimezoneShift=true&useLegacyDatetimeCode=false&serverTimezone=UTC&useSSL=false')
+        'jdbc:mysql://localhost:3306/' + db
+         + '?user=' + user
+         + '&password=' + passwd
+         + '&useUnicode=true&useJDBCCompliantTimezoneShift=true&useLegacyDatetimeCode=false&serverTimezone=UTC&useSSL=false')
 
     # CREATE TABLE SCHEMA
     schema = StructType([
@@ -125,20 +127,22 @@ if __name__ == "__main__":
     # setting checkpoint
     # ssc.checkpoint(".")
 
-    #
+    tf_val = 1048576
+
     # LOADING AND COMPUTING TF's TRAINING MODEL
     print('Loading TRAINING_TF_MODEL...',end="")
-    tf_training = sc.pickleFile('/Users/davidenardone/Desktop/TF_MODEL')
+    tf_training = sc.pickleFile(os.getcwd()+"/Desktop/MODEL/TF/TF_MODEL_"+str(tf_val))
     print('done!')
 
     print('Computing TF-IDF MODEL...',end="")
-    global idf_training
-    idf_training = IDF().fit(tf_training)
+    idf_training = IDF(minDocFreq=5).fit(tf_training)
     print('done!')
 
     print('Loading Naive Bayes Model...',end="")
-    NBM = NaiveBayesModel.load(sc, "/Users/davidenardone/Desktop/NaiveBayesModel")
+    NBM = NaiveBayesModel.load(sc, os.getcwd()+"/Desktop/MODEL/NBM/NaiveBayesModel_"+str(tf_val))
     print('done!')
+
+    print('READY TO PROCESS DATA...')
 
     kafkaParams = {'metadata.broker.list"': kafka_brokers}
 
@@ -169,7 +173,7 @@ if __name__ == "__main__":
     text = tweet.map(lambda tup: tup[1])
 
     #computing TF-IDF for each tweet and classifying it
-    hashingTF = HashingTF()
+    hashingTF = HashingTF(tf_val)
     tfidf_testing = text.map(lambda tup: hashingTF.transform(tup)) \
                     .transform(lambda tup: idf_training.transform(tup)) \
 
@@ -192,36 +196,47 @@ if __name__ == "__main__":
 
     ################################################TRAINING MODEL##########################################
 
-
-
-    # sc = SparkContext(appName="TrainingBayesModel")
+    # conf = (SparkConf().setMaster("local[4]")
+    #     .set("spark.app.name","TrainingBayesModel")
+    #     .set("spark.executor.cores", "4")
+    #     .set("spark.cores.max", "4")
+    #     .set('spark.executor.memory', '6g')
+    # )
+    #
+    # sc = SparkContext(conf=conf)
+    # # rdd = sc.parallelize(input_data, numSlices=4)
     # ssc = StreamingContext(sc, 1)
     #
+    # print('Loading dataset...')
+    #
     # allData = sc.textFile(
-    #                     "/Users/davidenardone/twitterDataset/twitter/test_data.txt",
+    #                     "/Users/davidenardone/twitterDataset/twitter/training_data.txt",
     #                       use_unicode=False
     #                      )
     #
     # obj1 = TweetPreProcessing()
     #
-    # data = allData.map(lambda x: x.replace("\'",''))\
+    # training = allData.map(lambda x: x.replace("\'",''))\
     #               .map(lambda x: x.split('",'))\
     #               .flatMap(obj1.TweetBuilder)
     #
+    # # training, test = data.randomSplit([0.7, 0.3], seed=0)
     #
-    # training, test = data.randomSplit([0.7, 0.3], seed=0)
+    # tf_val = 1024
     #
-    # hashingTF = HashingTF()
+    # hashingTF = HashingTF(tf_val)
     #
-    # print('computing TF-IDF...')
+    # print('Computing TF model...')
     #
     # tf_training = training.map(lambda tup: hashingTF.transform(tup[1]))
     #
-    # # tf_training.foreach(print)
-    # # print('Saving TF_MODEL...')
-    # # tf_training.saveAsPickleFile('/Users/davidenardone/Desktop/TF_MODEL')
+    # print('Saving TF_MODEL...')
+    #
+    # tf_training.saveAsPickleFile("/Users/davidenardone/Desktop/MODEL/TF_MODEL_"+str(tf_val))
     #
     # idf_training = IDF().fit(tf_training)
+    #
+    # print('computing TF-IDF...')
     #
     # tfidf_training = idf_training.transform(tf_training)
     #
@@ -237,8 +252,6 @@ if __name__ == "__main__":
     #
     # training_labeled = joined_tfidf_training.map(lambda tup: tup[1])
     #
-    # # labeled_training_data.foreach(print)
-    #
     # labeled_training_data = training_labeled.map(lambda k: LabeledPoint(k[0][0], k[1]))
     #
     # print('computing Naive Bayes Model...')
@@ -247,43 +260,6 @@ if __name__ == "__main__":
     #
     # print('Saving Naive Bayes Model...')
     #
-    # model.save(sc, "/Users/davidenardone/Desktop/NaiveBayesModel_2")
-    #
-    # tf_test = test.map(lambda tup: hashingTF.transform(tup[1]))
-    #
-    # idf_test = IDF().fit(tf_test)
-    #
-    # tfidf_test = idf_test.transform(tf_test)
-    #
-    # tfidf_idx = tfidf_test.zipWithIndex()
-    #
-    # test_idx = test.zipWithIndex()
-    #
-    # idx_test = test_idx.map(lambda line: (line[1], line[0]))
-    #
-    # idx_tfidf = tfidf_idx.map(lambda l: (l[1], l[0]))
-    #
-    # joined_tfidf_test = idx_test.join(idx_tfidf)
-    #
-    # test_labeled = joined_tfidf_test.map(lambda tup: tup[1])
-    #
-    # labeled_test_data = test_labeled.map(lambda k: LabeledPoint(k[0][0], k[1]))
-    #
-    # # labeled_training_data.foreach(lambda p: p.f)
-    # # exit(-1)
-    #
-    # predictionAndLabel = labeled_test_data.map(lambda p: (model.predict(p.features), p.label))
-    #
-    # accuracy = 1.0 * predictionAndLabel.filter(lambda (x, v): x == v).count() / labeled_test_data.count()
-    #
-    # print(accuracy)
-    #
-    # labeled_2 = test_labeled.map(lambda k: (k[0][1], LabeledPoint(k[0][0], k[1])))
-    #
-    # predictionAndLabel2 = labeled_2.map(lambda p: [p[0], model.predict(p[1].features), p[1].label])
-    #
-    # accuracy = 1.0 * predictionAndLabel2.filter(lambda (x, v): x == v).count() / labeled_test_data.count()
-    #
-    # print(accuracy)
+    # model.save(sc, "/Users/davidenardone/Desktop/MODEL/NBM/NaiveBayesModel_"+str(tf_val))
 
     ################################################TRAININING MODEL########################################

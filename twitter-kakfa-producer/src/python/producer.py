@@ -1,11 +1,10 @@
 from __future__ import print_function
-
+from kafka import KafkaProducer
 import os
-import time
 import json
+import time
 import csv
 import random
-from kafka import KafkaProducer
 import ConfigParser
 
 
@@ -17,16 +16,16 @@ if __name__ == "__main__":
 
     #reading configuration
     brookers = config.get('Kafka configurations', 'metadata.broker.list')
-    kafka_topic = config.get('Kafka configurations', 'kafka.topic').replace('"', '''''')
+    kafka_topic = config.get('Kafka configurations', 'kafka.topic')# .replace('"', '''''')
     request_required_acks = config.get('Kafka configurations', 'request.required.acks')
 
-
+    # CREATING KAFKA PRODUCER
     producer = KafkaProducer(
         bootstrap_servers = brookers,
         acks = int(request_required_acks)
     )
 
-    #reading tweets from a file and send to the consumer
+    # READS TWEETS FROM A FILE AND SEND IT TO A CONSUMER
 
     # read text file tab-separated
     text_file = list(
@@ -42,9 +41,9 @@ if __name__ == "__main__":
     # shuffling data
     random.shuffle(text_file)
 
+    # SIMULATING TWEETS' STREAM
     for row in text_file:
         time.sleep(1)
-        # text = str(row)
         print(row)
         jd = json.dumps(row).encode('ascii')
         producer.send(kafka_topic,jd)
