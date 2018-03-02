@@ -58,7 +58,7 @@ if __name__ == "__main__":
     
      idf_training = IDF().fit(tf_training)
     
-     print('computing TF-IDF...')
+     print('Computing TF-IDF...')
     
      tfidf_training = idf_training.transform(tf_training)
     
@@ -76,7 +76,7 @@ if __name__ == "__main__":
     
      labeled_training_data = training_labeled.map(lambda k: LabeledPoint(k[0][0], k[1]))
     
-     print('computing Naive Bayes Model...')
+     print('Computing Naive Bayes Model...')
     
      model = NaiveBayes.train(labeled_training_data, 1.0)
     
