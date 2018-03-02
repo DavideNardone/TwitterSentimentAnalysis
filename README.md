@@ -17,15 +17,15 @@ Usually, this analysis is performed "offline" using Machine Learning (ML) techni
   
   # Usage
   
-  1. Download Kafka 1.0.0 release from [here](https://www.apache.org/dyn/closer.cgi?path=/kafka/1.0.0/kafka_2.11-1.0.0.tgz)
+  1. Download Kafka 1.0.0 release from [here](https://www.apache.org/dyn/closer.cgi?path=/kafka/1.0.0/kafka_2.11-1.0.0.tgz).
   
   2. Since Kafka uses ZooKeeper, you need to first start a ZooKeeper server if you don't already have one. You can use the convenience script packaged with kafka to get a quick-and-dirty single-node ZooKeeper instance, by running the following command:
   
-  `bin/zookeeper-server-start.sh config/zookeeper.properties`
+    `bin/zookeeper-server-start.sh config/zookeeper.properties`
   
   3. Start the Kafka server:
   
-  `bin/kafka-server-start.sh config/server.properties`
+    `bin/kafka-server-start.sh config/server.properties`
   
   Once the servers have been started, you can use one of the two models:
   
