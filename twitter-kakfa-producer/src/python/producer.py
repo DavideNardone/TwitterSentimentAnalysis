@@ -30,7 +30,7 @@ if __name__ == "__main__":
     # read text file tab-separated
     text_file = list(
         csv.reader(
-            open('/Users/davidenardone/twitterDataset/twitter/testing_data.txt', 'rU')
+            open('/twitterDataset/twitter/testing_data.txt', 'rU')
             # open('/Users/davidenardone/Desktop/kmeans_data.txt', 'rU')
             # delimiter = '\t',
             # lineterminator='\r\n',
