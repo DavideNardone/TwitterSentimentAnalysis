@@ -74,7 +74,7 @@ def createUniqueTableName(name):
 if __name__ == "__main__":
 
     config = ConfigParser.ConfigParser()
-    config.read(os.getcwd()+'/PycharmProjects/TwitterSentimentAnalysis/twitter-kakfa-consumer/conf/consumer.conf')
+    config.read(os.getcwd()+'/TwitterSentimentAnalysis/twitter-kakfa-consumer/conf/consumer.conf')
 
     # READING CONFIGURATION
     app_name = config.get('Spark configurations', 'spark.app.name')
@@ -92,7 +92,7 @@ if __name__ == "__main__":
     )
 
     properties = ConfigParser.ConfigParser()
-    properties.read(os.getcwd()+'/PycharmProjects/TwitterSentimentAnalysis/db/db-properties.conf')
+    properties.read(os.getcwd()+'/TwitterSentimentAnalysis/db/db-properties.conf')
     db = properties.get('jdbc configurations', 'database')
     user = properties.get('jdbc configurations', 'user')
     passwd  = properties.get('jdbc configurations', 'password')
@@ -151,7 +151,7 @@ if __name__ == "__main__":
 
     # LOADING AND COMPUTING TF's TRAINING MODEL
     print('Loading TRAINING_TF_MODEL...')
-    tf_training = sc.pickleFile(os.getcwd()+'/Desktop/MODEL/TF/TF_MODEL_'+str(feature_dim))
+    tf_training = sc.pickleFile(os.getcwd()+'/model/TF/TF_MODEL_'+str(feature_dim))
     print('done!')
 
     print('Computing TF-IDF MODEL...')
