@@ -5,7 +5,7 @@ A fundamental task of SA is to "classify" the polarity of a given document text,
 Usually, this analysis is performed "offline" using Machine Learning (ML) techniques. In this project two online tweet classification methods have been proposed, which exploits the well known framework "Apache Spark" for processing the data and the tool "Apache Zeppelin" for data visualization.
 
 
-# Prerequisites
+# Requirements
 
   - Python 2.7 or greater <br>
   - Pyspark
