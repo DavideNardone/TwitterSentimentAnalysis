@@ -25,17 +25,24 @@ Usually, this analysis is performed "offline" using Machine Learning (ML) techni
   
   Once the servers have been started, you can use one of the two models:
   
-  2.1 `StreamingNaiveBayesClassification.py`:
+  2.1 `StreamingNaiveBayesClassification`:
   
   `spark-submit
   --jars ~/workspace_spark/spark-1.6.2-bin-hadoop2.6/external/spark-streaming-kafka-assembly_2.10-1.6.2.jar
   --py-files modules/TweetPreProcessing.py,modules/Emoticons.py,modules/Acronyms.py ~/PycharmProjects/TwitterSentimentAnalysis/twitter-kakfa-consumer/src/main/python/StreamingNaiveBayesClassification.py`
 
-  2.2 `StreamingKmeansClassification.py`:
+  2.2 `StreamingKmeansClassification`:
   
   `spark-submit
   --jars ~/workspace_spark/spark-1.6.2-bin-hadoop2.6/external/spark-streaming-kafka-assembly_2.10-1.6.2.jar
   --py-files modules/TweetPreProcessing.py,modules/Emoticons.py,modules/Acronyms.py ~/PycharmProjects/TwitterSentimentAnalysis/twitter-kakfa-consumer/src/main/python/StreamingKmeansClassification.py`
   
-  
-  
+# Authors
+
+Davide Nardone, University of Naples Parthenope, Science and Techonlogies Departement,<br> Msc Applied Computer Science <br/>
+https://www.linkedin.com/in/davide-nardone-127428102
+
+# Contacts
+
+For any kind of problem, questions, ideas or suggestions, please don't esitate to contact me at: 
+- **davide.nardone@studenti.uniparthenope.it**
