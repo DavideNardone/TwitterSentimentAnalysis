@@ -1,4 +1,4 @@
-# Online Twitter Sentiment Analysis by Spark Streaming
+# Online Twitter Sentiment Analysis with Spark Streaming
 
 Sentiment Analysis (SA) relates to the use of: Natural Language Processing (NLP), analysis and computational linguistics text to extract and identify subjective information in the source material. 
 A fundamental task of SA is to "classify" the polarity of a given document text, phrases or levels of functionality/appearance - whether the opinion expressed in a document or in a sentence is positive, negative or neutral.
