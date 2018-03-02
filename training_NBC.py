@@ -1,5 +1,23 @@
+from __future__ import print_function
+from pyspark import SparkContext
+from pyspark.sql import SQLContext
+from pyspark.streaming import StreamingContext
+from pyspark.streaming.kafka import KafkaUtils
+from TweetPreProcessing import TweetPreProcessing
+from pyspark.mllib.classification import NaiveBayesModel
+from pyspark.sql import Row
+import ConfigParser
+import datetime
+import os
+import json
+from pyspark.mllib.feature import HashingTF
+from pyspark.mllib.feature import IDF
+from pyspark.sql.types import *    
+    
+if __name__ == "__main__":
+    
     # TRAINING MODEL
-
+    
      conf = (SparkConf().setMaster("local[4]")
          .set("spark.app.name","TrainingBayesModel")
          .set("spark.executor.cores", "4")
@@ -8,13 +26,13 @@
      )
     
      sc = SparkContext(conf=conf)
-      rdd = sc.parallelize(input_data, numSlices=4)
+     rdd = sc.parallelize(input_data, numSlices=4)
      ssc = StreamingContext(sc, 1)
     
      print('Loading dataset...')
     
      allData = sc.textFile(
-                         "/Users/davidenardone/twitterDataset/twitter/training_data.txt",
+                         "/twitterDataset/twitter/training_data.txt",
                            use_unicode=False
                           )
     
@@ -24,7 +42,7 @@
                    .map(lambda x: x.split('",'))\
                    .flatMap(obj1.TweetBuilder)
     
-      training, test = data.randomSplit([0.7, 0.3], seed=0)
+    training, test = data.randomSplit([0.7, 0.3], seed=0)
     
      tf_val = 1024
     
@@ -36,7 +54,7 @@
     
      print('Saving TF_MODEL...')
     
-     tf_training.saveAsPickleFile("/Users/davidenardone/Desktop/MODEL/TF_MODEL_"+str(tf_val))
+     tf_training.saveAsPickleFile("/model/TF_MODEL_"+str(tf_val))
     
      idf_training = IDF().fit(tf_training)
     
@@ -64,4 +82,4 @@
     
      print('Saving Naive Bayes Model...')
     
-     model.save(sc, "/Users/davidenardone/Desktop/MODEL/NBM/NaiveBayesModel_"+str(tf_val))
+     model.save(sc, "/model/NBM/NaiveBayesModel_"+str(tf_val))
